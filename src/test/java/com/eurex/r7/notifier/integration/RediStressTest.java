@@ -130,12 +130,8 @@ public class RediStressTest {
     }
 
     private void dropIndex(String indexName) {
-        try{
-            client.getRediSearch("ref"+indexName+"Idx").dropIndex(); // remove index and indexed records
-            client.getRediSearch("ts"+indexName+"Idx").dropIndex();
-        }catch(RedisException ex){
-            ex.printStackTrace();
-        }
+        client.getRediSearch("ref"+indexName+"Idx").dropIndex(); // remove index and indexed records
+        client.getRediSearch("ts"+indexName+"Idx").dropIndex();
     }
 
     private void createBondInstruments(int totalInstruments) throws InterruptedException, ExecutionException {
