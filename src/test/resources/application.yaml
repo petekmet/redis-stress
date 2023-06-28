@@ -1,0 +1,115 @@
+abc:
+  id: "Supik"
+mapper:
+- mapper-id: "futures-products-latest-2"
+  store-original: true
+
+  matchers:
+    - name: "C0.BDM_CLASS"
+      value: "Clearing Products"
+
+  key-mapping: "dsam:ref:{id}:latest"
+
+  attribute-mapping:
+    - from: "C0.BDM_CLASS"
+      to: "kind"
+      value-mapping:
+        - to: "future_products" #fixed attribute value set
+
+    - from: "C0_I0053"
+      to: "product_symbol"
+
+    - from: "C0_I0059"
+      to: "product_id"
+
+    - from: "C0_I0372"
+      to: "product_name"
+
+    - from: "C0_I0035"
+      to: "isin"
+
+    - from: "C0_I0183"
+      to: "currency"
+
+    - from: "C0#I0222"
+      to: "trading_calendar_symbol"
+
+    - from: "C0#I0248"
+      to: "line"
+
+    - from: "C0#I0249"
+      to: "type"
+      value-mapping:
+        - from: "FSTK"
+          to: "Futures on stock"
+        - from: "OSTK"
+          to: "Stock options"
+        - from: "FINX"
+          to: "Futures on index"
+        - from: "OINX"
+          to: "Options on index"
+        - from: "FBND"
+          to: "Bond futures"
+        - from: "FINT"
+          to: "Interest rate futures"
+        - from: "FVOL"
+          to: "Volatility futures"
+        - from: "OFBD"
+          to: "Bond options"
+        - from: "FENE"
+          to: "Energy futures" 
+        - from: "OFEN"
+          to: "Options on energy futures"
+        - from: "OFIT"
+          to: "Options on interest rate futures"
+        - from: "FCUR"
+          to: "FX rate futures"
+        - from: "OCUR"
+          to: "FX options"
+        - from: "OFIX"
+          to: "Options on index futures"
+
+    - from: "C0#I0250"
+      to: "product_status"
+
+    - from: "C0#I0258"
+      to: "margin_style"
+
+- mapper-id: "futures-contract-latest"
+  store-original: true                #will save copy from source in original
+  
+  matchers:                           #if all matchers are true, attribute mapping will be executed 
+    - name: "C0.BDM_CLASS"
+      value: "Financial futures"      #value match regexp
+    - name: "C0#I0165"                #contract status
+      value: "[A|R]"                  #match when "Active" or "Reporting" contract status
+    - name: "storeId"                 #will match time-series records only
+      value: "C0_0005"
+
+  key-mapping: "dsam:ref:futc:{id}:latest" #key in fixed format, content in curly bracket is source attribute name to be resolved
+  
+  attribute-mapping:
+    - from: "C0.BDM_CLASS"
+      to: "kind"
+      value-mapping:                  #simple text-based value mapping, possibly multiple translation types
+        - from: "Financial-futures"   #value match regexp
+          to: "future_contract"       #target value
+        
+    - from: "C0#0999"
+      to: "instrument_ir_surface"
+      value-mapping:                  #complex Java-base value mapping
+        - mapper-class: "com.eurex.r7.dsam.mappers.CustomComplexValueMapper" #custom mapper will populate any attribute according by implementation class
+
+    - from: "C0.BDM_CLASS['clearable products'].C0_I0059[C0#I0132].C0_I0183" # value C0_I0183 populated from clearable-product where product.C0_I0059=contract.C0#I0132
+      to: "product_currency"          #calcuated attribute created/updated by mapper class implementation
+      value-mapping:                  # alternative configurtion specifying mapper class and its respective configuration
+        - mapper-class: "com.eurex.r7.dsam.mappers.EntityJoiningMapper"
+          mapper-properties:
+          - name: "mapping-rule"
+            value: "kind['futures_product'].product_id[C0#I0132].currency" #writes currency from entity kind "features_product" searched by product_id 
+
+    - from: "C0_I0059"
+      to: "c7_product_id"
+
+    - from: "id"                      #keep existing attribute name/value pair in this entity instance
+    - from: "asOf"
