@@ -21,7 +21,7 @@
         <maven.compiler.target>17</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <lombok.version>1.18.26</lombok.version>
-        <redisson.version>3.18.0</redisson.version>
+        <redisson.version>3.22.1</redisson.version>
         <redisearch.version>2.0.3</redisearch.version>
         <mockito.version>4.4.0</mockito.version>
     </properties>
