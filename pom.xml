@@ -52,18 +52,4 @@
             <scope>provided</scope>
         </dependency>
     </dependencies>
-
-
-    <distributionManagement>
-        <repository>
-            <id>releases</id>
-            <name>artifactory.dbgcloud.io-releases</name>
-            <url>https://artifactory.dbgcloud.io:443/artifactory/risk-r7-maven-rel-local</url>
-        </repository>
-        <snapshotRepository>
-            <id>snapshots</id>
-            <name>artifactory.dbgcloud.io-snapshots</name>
-            <url>https://artifactory.dbgcloud.io:443/artifactory/risk-r7-maven-dev-local</url>
-        </snapshotRepository>
-    </distributionManagement>
 </project>
