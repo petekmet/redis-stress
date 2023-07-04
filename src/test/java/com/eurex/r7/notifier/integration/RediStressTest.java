@@ -1,25 +1,20 @@
 package com.eurex.r7.notifier.integration;
 
-import io.github.dengliming.redismodule.redisearch.client.RediSearchClient;
-import io.github.dengliming.redismodule.redisearch.index.IndexDefinition;
-import io.github.dengliming.redismodule.redisearch.index.IndexDefinition.DataType;
-import io.github.dengliming.redismodule.redisearch.index.IndexOptions;
-import io.github.dengliming.redismodule.redisearch.index.schema.Field;
-import io.github.dengliming.redismodule.redisearch.index.schema.FieldType;
-import io.github.dengliming.redismodule.redisearch.index.schema.Schema;
-import io.github.dengliming.redismodule.redisearch.index.schema.TagField;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import org.redisson.Redisson;
 import org.redisson.api.BatchOptions;
 import org.redisson.api.BatchResult;
 import org.redisson.api.RBatch;
 import org.redisson.api.RSearch;
+import org.redisson.api.RedissonClient;
 import org.redisson.api.SortOrder;
 import org.redisson.api.BatchOptions.ExecutionMode;
 import org.redisson.api.search.index.FieldIndex;
 import org.redisson.api.search.index.IndexType;
 import org.redisson.api.search.index.SortMode;
 import org.redisson.api.search.query.QueryOptions;
+import org.redisson.client.RedisClient;
 import org.redisson.client.codec.StringCodec;
 import org.redisson.config.Config;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -43,7 +38,7 @@ import java.util.stream.Stream;
 public class RediStressTest {
     
     @Autowired
-    private RediSearchClient client;
+    private RedissonClient client;
     // private static String ADO_ID = "myado3";
 
     public static String APP_KEY_PREFIX = "tk1:";
@@ -129,14 +124,16 @@ public class RediStressTest {
         createInstruments(200000, "Option", ()->randomOptionTimeSeriesRecord());
     }
 
-    @Test void testCreateRandomOptionPayload() {
+    @Test 
+    void testCreateRandomOptionPayload() {
         var payload = randomOptionTimeSeriesRecord();
         System.out.println("Single Option time-series payload bytes: "+payload.length());
         System.out.println(OPTIONS_INSTRUMENTS+"*"+TOTAL_TICKS_PER_INSTRUMENT+"*"+payload.length()+" = "+((long)payload.length())*TOTAL_TICKS_PER_INSTRUMENT*OPTIONS_INSTRUMENTS+" bytes, "+(long)payload.length()*TOTAL_TICKS_PER_INSTRUMENT*OPTIONS_INSTRUMENTS/1024/1024/1024+" GiBytes");
         System.out.println("Payload dump "+payload);
     }
 
-    @Test void testCreateRandomBondPayload() {
+    @Test 
+    void testCreateRandomBondPayload() {
         var payload = randomBondTimeSeriesRecord();
         System.out.println("Single Bond time-series payload bytes: "+payload.length());
         System.out.println(BONDS_INSTRUMENTS+"*"+TOTAL_TICKS_PER_INSTRUMENT+"*"+payload.length()+" = "+((long)payload.length())*TOTAL_TICKS_PER_INSTRUMENT*BONDS_INSTRUMENTS+" bytes, "+(long)payload.length()*TOTAL_TICKS_PER_INSTRUMENT*BONDS_INSTRUMENTS/1024/1024/1024+" GiBytes");
@@ -167,13 +164,13 @@ public class RediStressTest {
     @Test void testLoadFutures() throws InterruptedException, ExecutionException {
         // ft.search refFutureIdx "*" sortby id desc limit 0 10000
         // ft.search tsFutureIdx "@asOf:[0,0]" sortby id desc limit 0 10000
-        search4("refFutureIdx", "*");
+        search4("refFutureIdx", "@bdm:{future}");
         search4("tsFutureIdx", "@asOf:[0,0]");
     }
 
-    @Test void testLoadFuturesParalell() throws InterruptedException, ExecutionException {
+    @Test void testLoadFuturesParallel() throws InterruptedException, ExecutionException {
         var cf1 = CompletableFuture.runAsync(()->{
-            search4("refFutureIdx", "*");
+            search4("refFutureIdx", "@bdm:{future}");
         });
         var cf2 = CompletableFuture.runAsync(()->{
             search4("tsFutureIdx", "@asOf:[0,0]");
@@ -188,7 +185,7 @@ public class RediStressTest {
         search4("tsOptionIdx", "@asOf:[0,0]");
     }
 
-    @Test void testLoadOptionsParalell() throws InterruptedException, ExecutionException {
+    @Test void testLoadOptionsParallel() throws InterruptedException, ExecutionException {
         // ft.search refOptionIdx "*" sortby id desc limit 0 10000
         // ft.search tsOptionIdx "@asOf:[0,0]" sortby id desc limit 0 10000
         var cf1 = CompletableFuture.runAsync(()->{
@@ -305,21 +302,6 @@ public class RediStressTest {
         System.out.println("Query: "+redisQuery+", results: "+stream.count()+", download duration "+Duration.between(then, Instant.now()));
     }
 
-    private void setupIndex(String indexName) throws InterruptedException, ExecutionException {
-        client.getRediSearch("ref"+indexName+"Idx")
-            .createIndex(new Schema()
-            .addField(new TagField("bdm"))
-            .addField(new TagField("id"))
-            .addField(new Field("asOf", FieldType.NUMERIC).sortable()),
-            new IndexOptions().definition(new IndexDefinition(DataType.HASH).setPrefixes(List.of(APP_KEY_PREFIX+REFD_ENTITY_KEY_PREFIX+indexName.toLowerCase()+":"))));
-
-        client.getRediSearch("ts"+indexName+"Idx")
-            .createIndex(new Schema()
-            .addField(new TagField("id").sortable())
-            .addField(new Field("asOf", FieldType.NUMERIC).sortable()),
-            new IndexOptions().definition(new IndexDefinition(DataType.HASH).setPrefixes(List.of(APP_KEY_PREFIX+TS_ENTITY_KEY_PREFIX+indexName.toLowerCase()+":"))));
-    }
-
     private void setupIndex2(String indexName) throws InterruptedException, ExecutionException {
         client.getSearch().createIndex("ref"+indexName+"Idx", org.redisson.api.search.index.IndexOptions.defaults()
                                  .on(IndexType.HASH)
@@ -336,90 +318,90 @@ public class RediStressTest {
         }
 
     private void dropIndex(String indexName) {
-        client.getRediSearch("ref"+indexName+"Idx").dropIndex(); // remove index and indexed records
-        client.getRediSearch("ts"+indexName+"Idx").dropIndex();
+        client.getSearch().dropIndex("ref"+indexName+"Idx");
+        client.getSearch().dropIndex("ts"+indexName+"Idx");
     }
 
-    private void createBondInstruments(int totalInstruments) throws InterruptedException, ExecutionException {
-        var columns = createRandomColumnNames(5); // attribute columns
-        var lst = new ArrayList<CompletableFuture<BatchResult<?>>>();
-        for (int i = 0; i <  totalInstruments; i++) {
-            var id = String.format("BON.%06d", i);
+    // private void createBondInstruments(int totalInstruments) throws InterruptedException, ExecutionException {
+    //     var columns = createRandomColumnNames(5); // attribute columns
+    //     var lst = new ArrayList<CompletableFuture<BatchResult<?>>>();
+    //     for (int i = 0; i <  totalInstruments; i++) {
+    //         var id = String.format("BON.%06d", i);
             
-            final RBatch batch = client.createBatch(BatchOptions.defaults().executionMode(ExecutionMode.IN_MEMORY));
-            batch.getMap("tk1:rd:bond:"+id, StringCodec.INSTANCE).putAllAsync(createRandomColumnValues(columns, id, "bond", 0, 8));
+    //         final RBatch batch = client.createBatch(BatchOptions.defaults().executionMode(ExecutionMode.IN_MEMORY));
+    //         batch.getMap("tk1:rd:bond:"+id, StringCodec.INSTANCE).putAllAsync(createRandomColumnValues(columns, id, "bond", 0, 8));
             
-            createRandomTimeSeries(id, ()->randomBondTimeSeriesRecord())
-            .stream()
-            .forEach(tsRecord -> {
-                batch.getMap("tk1:ts:bond:"+id+":"+tsRecord.get("asOf"), StringCodec.INSTANCE).putAllAsync(tsRecord);
-            });
+    //         createRandomTimeSeries(id, ()->randomBondTimeSeriesRecord())
+    //         .stream()
+    //         .forEach(tsRecord -> {
+    //             batch.getMap("tk1:ts:bond:"+id+":"+tsRecord.get("asOf"), StringCodec.INSTANCE).putAllAsync(tsRecord);
+    //         });
             
-            lst.add(batch.executeAsync().toCompletableFuture());
-            System.out.println("saved TS for "+id);
-            if(i%2500==2499){
-                System.out.println("flushing batches...");
-                CompletableFuture.allOf(lst.toArray(new CompletableFuture[lst.size()])).get();
-                lst.clear();
-            }
+    //         lst.add(batch.executeAsync().toCompletableFuture());
+    //         System.out.println("saved TS for "+id);
+    //         if(i%2500==2499){
+    //             System.out.println("flushing batches...");
+    //             CompletableFuture.allOf(lst.toArray(new CompletableFuture[lst.size()])).get();
+    //             lst.clear();
+    //         }
             
-        }
-    }
+    //     }
+    // }
 
-    private void createFutureInstruments(int totalInstruments) throws InterruptedException, ExecutionException {
-        var columns = createRandomColumnNames(5); // attribute columns
-        var lst = new ArrayList<CompletableFuture<BatchResult<?>>>();
-        for (int i = 0; i <  totalInstruments; i++) {
-            var id = String.format("FUT.%06d", i);
+    // private void createFutureInstruments(int totalInstruments) throws InterruptedException, ExecutionException {
+    //     var columns = createRandomColumnNames(5); // attribute columns
+    //     var lst = new ArrayList<CompletableFuture<BatchResult<?>>>();
+    //     for (int i = 0; i <  totalInstruments; i++) {
+    //         var id = String.format("FUT.%06d", i);
         
-            final RBatch batch = client.createBatch(BatchOptions.defaults().executionMode(ExecutionMode.IN_MEMORY));
-            batch.getMap("tk1:rd:future:"+id, StringCodec.INSTANCE).putAllAsync(createRandomColumnValues(columns, id, "future", 0, 8));
+    //         final RBatch batch = client.createBatch(BatchOptions.defaults().executionMode(ExecutionMode.IN_MEMORY));
+    //         batch.getMap("tk1:rd:future:"+id, StringCodec.INSTANCE).putAllAsync(createRandomColumnValues(columns, id, "future", 0, 8));
             
-            createRandomTimeSeries(id, ()->randomFutureTimeSeriesRecord())
-            .stream()
-            .forEach(tsRecord -> {
-                batch.getMap("tk1:ts:future:"+id+":"+tsRecord.get("asOf"), StringCodec.INSTANCE).putAllAsync(tsRecord);
-            });
+    //         createRandomTimeSeries(id, ()->randomFutureTimeSeriesRecord())
+    //         .stream()
+    //         .forEach(tsRecord -> {
+    //             batch.getMap("tk1:ts:future:"+id+":"+tsRecord.get("asOf"), StringCodec.INSTANCE).putAllAsync(tsRecord);
+    //         });
             
-            lst.add(batch.executeAsync().toCompletableFuture());
-            System.out.println("saved TS for "+id);
-            if(i%5000==4999){
-                System.out.println("flushing batches...");
-                CompletableFuture.allOf(lst.toArray(new CompletableFuture[lst.size()])).get();
-                lst.clear();
-            }
-        }
-    }
+    //         lst.add(batch.executeAsync().toCompletableFuture());
+    //         System.out.println("saved TS for "+id);
+    //         if(i%5000==4999){
+    //             System.out.println("flushing batches...");
+    //             CompletableFuture.allOf(lst.toArray(new CompletableFuture[lst.size()])).get();
+    //             lst.clear();
+    //         }
+    //     }
+    // }
 
-    private void createOptionInstruments2(int totalInstruments) throws InterruptedException, ExecutionException {
-        var columns = createRandomColumnNames(5); // attribute columns
-        var lst = new ArrayList<CompletableFuture<BatchResult<?>>>();
-        for (int i = 0; i <  totalInstruments; i++) {
-            var id = String.format("OPT.%06d", i);
+    // private void createOptionInstruments2(int totalInstruments) throws InterruptedException, ExecutionException {
+    //     var columns = createRandomColumnNames(5); // attribute columns
+    //     var lst = new ArrayList<CompletableFuture<BatchResult<?>>>();
+    //     for (int i = 0; i <  totalInstruments; i++) {
+    //         var id = String.format("OPT.%06d", i);
 
-            final RBatch batch = client.createBatch(BatchOptions.defaults().executionMode(ExecutionMode.IN_MEMORY));
-            batch.getMap("tk1:rd:option:"+id, StringCodec.INSTANCE).putAllAsync(createRandomColumnValues(columns, id, "future", 0, 8));
+    //         final RBatch batch = client.createBatch(BatchOptions.defaults().executionMode(ExecutionMode.IN_MEMORY));
+    //         batch.getMap("tk1:rd:option:"+id, StringCodec.INSTANCE).putAllAsync(createRandomColumnValues(columns, id, "future", 0, 8));
             
-            createRandomTimeSeries(id, ()->randomOptionTimeSeriesRecord())
-            .stream()
-            .forEach(tsRecord -> {
-                batch.getMap("tk1:ts:option:"+id+":"+tsRecord.get("asOf"), StringCodec.INSTANCE).putAllAsync(tsRecord);
-            });
+    //         createRandomTimeSeries(id, ()->randomOptionTimeSeriesRecord())
+    //         .stream()
+    //         .forEach(tsRecord -> {
+    //             batch.getMap("tk1:ts:option:"+id+":"+tsRecord.get("asOf"), StringCodec.INSTANCE).putAllAsync(tsRecord);
+    //         });
             
-            lst.add(batch.executeAsync().toCompletableFuture());
-            System.out.println("saved TS for "+id);
-            if(i%5000==4999){
-                System.out.println("flushing batches...");
-                CompletableFuture.allOf(lst.toArray(new CompletableFuture[lst.size()])).get();
-                lst.clear();
-            }
-        }
-    }
+    //         lst.add(batch.executeAsync().toCompletableFuture());
+    //         System.out.println("saved TS for "+id);
+    //         if(i%5000==4999){
+    //             System.out.println("flushing batches...");
+    //             CompletableFuture.allOf(lst.toArray(new CompletableFuture[lst.size()])).get();
+    //             lst.clear();
+    //         }
+    //     }
+    // }
 
-    private void createOptionInstruments(int totalInstruments) throws InterruptedException, ExecutionException {
-        // createInstruments(totalInstruments, "Option", ()->randomOptionTimeSeriesRecord());
-        createOptionInstruments2(totalInstruments);
-    }
+    // private void createOptionInstruments(int totalInstruments) throws InterruptedException, ExecutionException {
+    //     // createInstruments(totalInstruments, "Option", ()->randomOptionTimeSeriesRecord());
+    //     createOptionInstruments2(totalInstruments);
+    // }
 
     private void createInstruments(int totalInstruments, String kind, Supplier<String> tsPayloadSupplier) throws InterruptedException, ExecutionException {
         var columns = createRandomColumnNames(5); // attribute columns
@@ -538,13 +520,13 @@ public class RediStressTest {
 @EnableAutoConfiguration
 class RefDataRepositoryTest2Configuration {
     @Bean
-    public RediSearchClient getRediSearchClient() {
+    public RedissonClient getRedisClient() {
         Config config = new Config();
         config.useSingleServer()
         .setConnectionPoolSize(150)
         .setTimeout(30000)
         .setRetryAttempts(100)
         .setAddress("redis://localhost:6379");
-        return new RediSearchClient(config);
+        return Redisson.create(config);
     }
 }
